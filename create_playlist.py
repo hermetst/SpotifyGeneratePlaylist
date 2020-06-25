@@ -40,41 +40,59 @@ class CreatePlaylist:
 
     def get_liked_videos(self):
         """Grab Our Liked Videos & Create A Dictionary Of Important Song Information"""
-        request = self.youtube_client.videos().list(
-            part="snippet,contentDetails,statistics",
-            myRating="like"
+        request = self.youtube_client.playlists().list(
+            part="snippet,contentDetails, id",
+            mine="True"
         )
         response = request.execute()
-
         # collect each video and get important information
-        for item in response["items"]:
-            video_title = item["snippet"]["title"]
-            youtube_url = "https://www.youtube.com/watch?v={}".format(
-                item["id"])
+        for item_pl in response["items"]:
+            request = self.youtube_client.playlistItems().list(
+                part="snippet, contentDetails, id",
+                playlistId=item_pl["id"]
+            )
+            
+            response_vid = request.execute()
 
-            # use youtube_dl to collect the song name & artist name
-            video = youtube_dl.YoutubeDL({}).extract_info(
-                youtube_url, download=False)
-            song_name = video["track"]
-            artist = video["artist"]
+            print("vid items")
 
-            if song_name is not None and artist is not None:
-                # save all important info and skip any missing song and artist
-                self.all_song_info[video_title] = {
-                    "youtube_url": youtube_url,
-                    "song_name": song_name,
-                    "artist": artist,
+            for item in response_vid["items"]:                
+                video_title = item["snippet"]["title"]
+                print("-----------PLAYLIST ID: ", item_pl["id"])
+                youtube_url = "https://www.youtube.com/watch?v={}".format(
+                    item["snippet"]["resourceId"]["videoId"])
+                print("ID IS: ", item["snippet"]["resourceId"]["videoId"])
+                # use youtube_dl to collect the song name & artist name
+                try:
+                    video = youtube_dl.YoutubeDL({}).extract_info(
+                        youtube_url, download=False)
+                except:
+                    ResponseException("YoutubeDL fuck u")
+                    continue
 
-                    # add the uri, easy to get song to put into playlist
-                    "spotify_uri": self.get_spotify_uri(song_name, artist)
+                song_name = video["track"]
+                artist = video["artist"]
+                print("printing song name: ", song_name)
+                if song_name is not None and artist is not None:
+                    print("INSIDE LOOP!!!!")
+                    print(song_name)
+                    print(artist)
+                    # save all important info and skip any missing song and artist
+                    self.all_song_info[video_title] = {
+                        "youtube_url": youtube_url,
+                        "song_name": song_name,
+                        "artist": artist,
+
+                        # add the uri, easy to get song to put into playlist
+                        "spotify_uri": self.get_spotify_uri(song_name, artist)
 
                 }
 
     def create_playlist(self):
         """Create A New Playlist"""
         request_body = json.dumps({
-            "name": "Youtube Liked Vids",
-            "description": "All Liked Youtube Videos",
+            "name": "spotting",
+            "description": "me doing things",
             "public": True
         })
 
@@ -89,12 +107,15 @@ class CreatePlaylist:
             }
         )
         response_json = response.json()
-
+        print("SPOTIFY RESPONSE")
+        print(response_json)
         # playlist id
         return response_json["id"]
 
     def get_spotify_uri(self, song_name, artist):
         """Search For the Song"""
+        print("Search for the song")
+        print(song_name,"  ",artist)
         query = "https://api.spotify.com/v1/search?query=track%3A{}+artist%3A{}&type=track&offset=0&limit=20".format(
             song_name,
             artist
@@ -107,6 +128,7 @@ class CreatePlaylist:
             }
         )
         response_json = response.json()
+        print("SEARCH RESPONSE: ", response_json)
         songs = response_json["tracks"]["items"]
 
         # only use the first song
@@ -140,7 +162,8 @@ class CreatePlaylist:
                 "Authorization": "Bearer {}".format(spotify_token)
             }
         )
-
+        print("add song response")
+        print(response.json())
         # check for valid response status
         if response.status_code != 200:
             raise ResponseException(response.status_code)
